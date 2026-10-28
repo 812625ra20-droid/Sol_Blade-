@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CALCU-JET 3D - 完全自由飛行シューティング</title>
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: #151d30;
+      --accent-cyan: #06b6d4;
+      --accent-pink: #f43f5e;
+      --accent-gold: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 10px;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: var(--card-bg);
+      border-radius: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(6, 182, 212, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .game-area {
+      position: relative;
+      height: 380px;
+      background: #000;
+      border-bottom: 2px solid var(--accent-cyan);
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* 照準（クロスヘア） */
+    .crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .crosshair::before, .crosshair::after {
+      content: '';
+      position: absolute;
+      background: var(--accent-pink);
+    }
+
+    .crosshair::before {
+      top: 11px; left: 0; width: 24px; height: 2px;
+    }
+
+    .crosshair::after {
+      top: 0; left: 11px; width: 2px; height: 24px;
+    }
+
+    .hud {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .hud-text {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--text-main);
+      text-shadow: 0 0 8px rgba(0,0,0,0.9);
+    }
+
+    .question-box {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      border: 2px solid var(--accent-cyan);
+      padding: 8px 20px;
+      border-radius: 24px;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
+      z-index: 5;
+      pointer-events: none;
+      letter-spacing: 1px;
+    }
+
+    .game-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.92);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      z-index: 10;
+    }
+
+    .game-overlay.hidden {
+      display: none;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+      color: white;
+      border: none;
+      padding: 14px 36px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.6);
+      transition: all 0.15s ease;
+    }
+
+    .btn-start:hover {
+      transform: scale(1.05);
+    }
+
+    /* 外部電卓ボタンエリア */
+    .calc-link-area {
+      padding: 16px;
+      background: var(--card-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-calc-link {
+      width: 100%;
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid var(--accent-cyan);
+      color: var(--accent-cyan);
+      padding: 12px;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      text-decoration: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-calc-link:hover {
+      background: var(--accent-cyan);
+      color: #000;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+
+    .controls-guide {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.4;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+  <!-- 3Dゲーム画面エリア -->
+  <div class="game-area">
+    <canvas id="gameCanvas"></canvas>
+    <div class="crosshair"></div>
+
+    <div class="hud">
+      <div id="hudScore" class="hud-text">SCORE: 0</div>
+      <div id="hudHp" class="hud-text">HP: ❤️❤️❤️</div>
+    </div>
+
+    <div id="questionBox" class="question-box">TARGET: ?</div>
+
+    <div id="gameOverlay" class="game-overlay">
+      <h2 style="color: var(--accent-cyan); font-size: 1.6rem; letter-spacing: 2px;">CALCU-JET 3D</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 0 25px; line-height: 1.5;">
+        【全方向フル操作】<br>
+        <b style="color:#fff">W/S</b>: 前進/後退 | <b style="color:#fff">A/D</b>: 左右移動<br>
+        <b style="color:#fff">Shift/Ctrl</b>: 上昇/下降<br>
+        <b style="color:var(--accent-pink)">SPACE</b>: レーザー発射！正解の風船を撃ち抜け！
+      </p>
+      <button id="startBtn" class="btn-start">START FLYING</button>
+    </div>
+  </div>
+
+  <!-- 外部電卓エリア -->
+  <div class="calc-link-area">
+    <a href="https://www.google.com/search?q=calculator" target="_blank" rel="noopener noreferrer" class="btn-calc-link">
+      🧮 電卓を開く（外部サイトへ） ↗
+    </a>
+    <div class="controls-guide">
+      ※電卓で正解を計算し、自由自在に空を飛んで正しい答えの風船に狙いを定めてSPACEで撃破しよう！
+    </div>
+  </div>
+</div>
+
+<script>
+  // 音声合成
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+
+  function playSound(type) {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    const now = audioCtx.currentTime;
+
+    if (type === 'shoot') {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(900, now);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } else if (type === 'hit') {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(250, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    }
+  }
+
+  // キーボード操作フラグ
+  const keys = {};
+  window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (e.key === ' ' && isPlaying) {
+      e.preventDefault();
+      shootLaser();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+  });
+
+  // -------------------------------------------------------------
+  // Three.js 3Dエンジン
+  // -------------------------------------------------------------
+  const canvas = document.getElementById('gameCanvas');
+  const overlay = document.getElementById('gameOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const questionBox = document.getElementById('questionBox');
+  const hudScore = document.getElementById('hudScore');
+  const hudHp = document.getElementById('hudHp');
+
+  let scene, camera, renderer, playerJet;
+  let balloons = [];
+  let lasers = [];
+  let isPlaying = false;
+  let score = 0;
+  let hp = 3;
+
+  let currentProblem = { text: '', ans: 0 };
+
+  function init3D() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060913);
+    scene.fog = new THREE.FogExp2(0x060913, 0.01);
+
+    camera = new THREE.PerspectiveCamera(65, canvas.parentElement.clientWidth / canvas.parentElement.clientHeight, 0.1, 1000);
+
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
+
+    // ライト
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0x06b6d4, 1.2);
+    dirLight.position.set(20, 40, 20);
+    scene.add(dirLight);
+
+    // 空間空間ワイヤーフレームボックス
+    const spaceGeo = new THREE.BoxGeometry(100, 100, 150);
+    const spaceMat = new THREE.MeshBasicMaterial({ color: 0x1e293b, wireframe: true });
+    const spaceBox = new THREE.Mesh(spaceGeo, spaceMat);
+    spaceBox.position.set(0, 0, -50);
+    scene.add(spaceBox);
+
+    // 自機モデル作成
+    playerJet = new THREE.Group();
+    const bodyGeo = new THREE.ConeGeometry(0.7, 2.5, 4);
+    bodyGeo.rotateX(Math.PI / 2);
+    const bodyMat = new THREE.MeshPhongMaterial({ color: 0x06b6d4, flatShading: true });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    playerJet.add(body);
+
+    const wingGeo = new THREE.BoxGeometry(3, 0.08, 0.8);
+    const wingMat = new THREE.MeshPhongMaterial({ color: 0xf43f5e });
+    const wing = new THREE.Mesh(wingGeo, wingMat);
+    wing.position.set(0, 0, 0.4);
+    playerJet.add(wing);
+
+    scene.add(playerJet);
+  }
+
+  // キャンバス用テキストテクスチャ
+  function createTextTexture(text) {
+    const cv = document.createElement('canvas');
+    cv.width = 256;
+    cv.height = 256;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = '#06b6d4';
+    ctx.beginPath();
+    ctx.arc(128, 128, 110, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 85px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 128);
+
+    return new THREE.CanvasTexture(cv);
+  }
+
+  // 風船ターゲット生成
+  function createBalloon(val, position) {
+    const group = new THREE.Group();
+
+    const geo = new THREE.SphereGeometry(1.6, 16, 16);
+    const mat = new THREE.MeshPhongMaterial({
+      map: createTextTexture(String(val)),
+      shininess: 90
+    });
+    const sphere = new THREE.Mesh(geo, mat);
+    group.add(sphere);
+
+    group.position.copy(position);
+    group.userData = { val: val };
+
+    scene.add(group);
+    balloons.push(group);
+  }
+
+  // 新問題生成
+  function generateNewQuestion() {
+    balloons.forEach(b => scene.remove(b));
+    balloons = [];
+
+    const a = Math.floor(Math.random() * 12) + 1;
+    const b = Math.floor(Math.random() * 12) + 1;
+    const ans = a + b;
+
+    currentProblem = {
+      text: `${a} + ${b} = ?`,
+      ans: ans
+    };
+
+    questionBox.innerText = `TARGET: ${currentProblem.text}`;
+
+    // プレイヤーの視線の先（前方空間）に風船群を配置
+    const baseZ = playerJet.position.z - 30;
+
+    const positions = [
+      new THREE.Vector3(playerJet.position.x - 8, playerJet.position.y + (Math.random() * 6 - 3), baseZ),
+      new THREE.Vector3(playerJet.position.x, playerJet.position.y + (Math.random() * 6 - 3), baseZ - 10),
+      new THREE.Vector3(playerJet.position.x + 8, playerJet.position.y + (Math.random() * 6 - 3), baseZ)
+    ];
+
+    // ランダムに正解の風船を混ぜる
+    const correctIdx = Math.floor(Math.random() * 3);
+    for (let i = 0; i < 3; i++) {
+      if (i === correctIdx) {
+        createBalloon(ans, positions[i]);
+      } else {
+        let dummyAns;
+        do {
+          dummyAns = ans + (Math.floor(Math.random() * 12) - 6);
+        } while (dummyAns === ans || dummyAns <= 0);
+        createBalloon(dummyAns, positions[i]);
+      }
+    }
+  }
+
+  // レーザー射撃
+  function shootLaser() {
+    playSound('shoot');
+
+    const geo = new THREE.CylinderGeometry(0.1, 0.1, 2, 8);
+    geo.rotateX(Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+    const laser = new THREE.Mesh(geo, mat);
+
+    // 自機の位置と向きをセット
+    laser.position.copy(playerJet.position);
+    laser.rotation.copy(playerJet.rotation);
+
+    // 自機の前方ベクトルを取得
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(playerJet.quaternion);
+
+    lasers.push({
+      mesh: laser,
+      dir: dir,
+      speed: 1.8
+    });
+
+    scene.add(laser);
+  }
+
+  function startGame() {
+    isPlaying = true;
+    score = 0;
+    hp = 3;
+    hudScore.innerText = `SCORE: ${score}`;
+    hudHp.innerText = `HP: ${"❤️".repeat(hp)}`;
+    overlay.classList.add('hidden');
+
+    playerJet.position.set(0, 0, 0);
+    playerJet.rotation.set(0, 0, 0);
+
+    generateNewQuestion();
+    animate();
+  }
+
+  function gameOver() {
+    isPlaying = false;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('h2').innerText = "GAME OVER";
+    overlay.querySelector('p').innerHTML = `Final Score: <b style="color:var(--accent-cyan); font-size: 1.3rem;">${score}</b>`;
+    startBtn.innerText = "FLY AGAIN";
+  }
+
+  // ループ関数
+  function animate() {
+    if (!isPlaying) return;
+
+    // --- 完全自由飛行コントロール ---
+    const moveSpeed = 0.35;
+    const rotSpeed = 0.04;
+
+    // 左右移動 (A / D または 矢印)
+    if (keys['a'] || keys['A'] || keys['ArrowLeft']) {
+      playerJet.position.x -= moveSpeed;
+      playerJet.rotation.z = Math.min(playerJet.rotation.z + rotSpeed, 0.4);
+    } else if (keys['d'] || keys['D'] || keys['ArrowRight']) {
+      playerJet.position.x += moveSpeed;
+      playerJet.rotation.z = Math.max(playerJet.rotation.z - rotSpeed, -0.4);
+    } else {
+      playerJet.rotation.z *= 0.88;
+    }
+
+    // 前後移動 (W: 前進 / S: 後退)
+    if (keys['w'] || keys['W']) {
+      playerJet.position.z -= moveSpeed * 1.2;
+    }
+    if (keys['s'] || keys['S']) {
+      playerJet.position.z += moveSpeed * 1.2;
+    }
+
+    // 上下移動 (Shift: 上昇 / Ctrl: 下降 または Up/Down矢印)
+    if (keys['Shift'] || keys['ArrowUp']) {
+      playerJet.position.y += moveSpeed;
+      playerJet.rotation.x = Math.max(playerJet.rotation.x - rotSpeed, -0.3);
+    } else if (keys['Control'] || keys['ArrowDown']) {
+      playerJet.position.y -= moveSpeed;
+      playerJet.rotation.x = Math.min(playerJet.rotation.x + rotSpeed, 0.3);
+    } else {
+      playerJet.rotation.x *= 0.88;
+    }
+
+    // カメラの滑らかな自由追従
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerJet.position.x, 0.1);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, playerJet.position.y + 2.5, 0.1);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, playerJet.position.z + 8, 0.1);
+    camera.lookAt(playerJet.position.x, playerJet.position.y, playerJet.position.z - 10);
+
+    // 風船アニメーション
+    balloons.forEach(b => {
+      b.rotation.y += 0.01;
+    });
+
+    // レーザー更新＆レイキャスト的ヒット判定
+    for (let i = lasers.length - 1; i >= 0; i--) {
+      const l = lasers[i];
+      l.mesh.position.addScaledVector(l.dir, l.speed);
+
+      // ヒット判定
+      for (let j = balloons.length - 1; j >= 0; j--) {
+        const b = balloons[j];
+        if (l.mesh.position.distanceTo(b.position) < 2.0) {
+          playSound('hit');
+
+          if (b.userData.val === currentProblem.ans) {
+            score += 100;
+            hudScore.innerText = `SCORE: ${score}`;
+            generateNewQuestion(); // 新問題
+          } else {
+            // 不正解の風船を破壊
+            scene.remove(b);
+            balloons.splice(j, 1);
+          }
+
+          scene.remove(l.mesh);
+          lasers.splice(i, 1);
+          break;
+        }
+      }
+
+      // 一定距離進んだら消去
+      if (l.mesh.position.distanceTo(playerJet.position) > 100) {
+        scene.remove(l.mesh);
+        lasers.splice(i, 1);
+      }
+    }
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener('load', () => {
+    init3D();
+  });
+
+  startBtn.addEventListener('click', startGame);
+</script>
+</body>
+</html>
