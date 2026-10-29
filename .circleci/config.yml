@@ -1,0 +1,16 @@
+version: 2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Placeholder Pipeline
+          command: echo "Sol_Blade- initial pipeline setup successful!"
+
+workflows:
+  sample:
+    jobs:
+      - build-and-test
